@@ -18,6 +18,8 @@ module Codec.Xlsx.Parser(
 import           Control.Applicative
 import           Control.Monad (join)
 import           Control.Monad.IO.Class()
+import           Control.Monad.Trans.Resource
+
 import           Data.Function (on)
 import qualified Data.IntMap as M
 import qualified Data.IntSet as S
@@ -36,7 +38,6 @@ import           Data.ByteString.Lazy.Char8()
 import qualified Codec.Archive.Zip as Zip
 import           Data.Conduit
 import qualified Data.Conduit.List as CL
-import           Data.Conduit.Util hiding (zip)
 import           Data.XML.Types
 import           System.FilePath
 import           Text.XML as X
@@ -107,7 +108,7 @@ sheet Xlsx{xlArchive=ar, xlSharedStrings=ss, xlWorksheetFiles=sheets} sheetN
     parseRows = element (n"sheetData") &/ element (n"row") >=> parseRow
     parseRow c = do
       r <- c $| attribute "r" >=> decimal
-      let ht = if attribute "customHeight" c == ["true"] 
+      let ht = if attribute "customHeight" c == ["true"]
                then listToMaybe $ c $| attribute "ht" >=> rational
                else Nothing
       return (r, ht, c $/ element (n"c") >=> parseCell)
@@ -133,13 +134,13 @@ sheet Xlsx{xlArchive=ar, xlSharedStrings=ss, xlWorksheetFiles=sheets} sheetN
       where
         (rowMap, (minX, maxX, minY, maxY, cellMap)) = foldr collectRow rInit rd
         rInit = (Map.empty, (maxBound, minBound, maxBound, minBound, Map.empty))
-        collectRow (_, Nothing, cells) (rowMap, cellData) = 
+        collectRow (_, Nothing, cells) (rowMap, cellData) =
           (rowMap, foldr collectCell cellData cells)
-        collectRow (n, Just h, cells) (rowMap, cellData) = 
+        collectRow (n, Just h, cells) (rowMap, cellData) =
           (Map.insert n h rowMap, foldr collectCell cellData cells)
         collectCell (x, y, cd) (minX, maxX, minY, maxY, cellMap) =
           (min minX x, max maxX x, min minY y, max maxY y, Map.insert (x,y) cd cellMap)
-    
+
 
 -- | Get all rows from specified worksheet.
 sheetRowSource :: MonadThrow m => Xlsx -> Int -> Source m MapRow
